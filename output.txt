@@ -1,0 +1,1350 @@
+Page 1:
+For Peer ReviewSummerTime: Variable-length Time Series Summarization with Application 
+to Physical Activity Analysis
+
+SummerTime seeks to summarize globally time-series signals and provides a fixed-length, robust representation of the 
+variable-length time series. Many machine learning methods depend on data instances with a fixed number of features. As a 
+result, those methods cannot be directly applied to variable-length time series data. Existing methods such as sliding windows 
+can lose minority local information. Summarization conducted by the SummerTime method will be a fixed-length feature 
+vector which can be used in place of the time series dataset for use with classical machine learning methods. We use 
+Gaussian Mixture models (GMM) over small same-length disjoint windows in the time series to group local data into clusters. 
+The time series’ rate of membership for each cluster will be a feature in the summarization. By making use of variational 
+methods, GMM converges to a more robust mixture, meaning the clusters are more resistant to noise and overfitting. Further, 
+the model is naturally capable of converging to an appropriate cluster count. We validate our method on a challenging real-
+world dataset, an imbalanced physical activity dataset with a variable-length time series structure. We compare our results to 
+state-of-the-art studies and show high-quality improvement by classifying with only the summarization.
+CCS CONCEPTS • Computing methodologies → Machine learning → Learning paradigms → Supervised learning → 
+Structured outputs; • Applied computing → Life and medical sciences;
+Additional Keywords and Phrases: Time Series, Clustering, Classification, Regression, Summarization
+ACM Reference Format:
+1 INTRODUCTION
+Physical activity (PA) is one of the most important areas when people try to know more about themselves. 
+To record the activities, time-series data is abundant in the PA, especially when researchers dynamically record 
+the activities. In this paper, we propose a data-driven method which provides variable-length summarization 
+and classification of physical activities.
+Physical activity is defined as any movement of the body that requires energy expenditure. Since the 
+activities always happen with multiple body movements, we named a sequence of single movements as a 
+specific activity. Then, the different combinations of single breakdown movements are defined as different PAs. 
+Researchers need to match the real movement track with the pre-defined activities which contain a specific 
+sequence of movements. Since the different PAs may consist of the same sub-sequence of single body 
+movements, it is crucial to decide how to break the full movement track. However, it is hard to set an appropriate 
+break in the movement track based on the traditional PA technique. In this paper, we apply the data-driven Page 1 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 2:
+For Peer Review
+2machine learning method to provide a way to redefine the PAs as different clusters. These clusters will have 
+significant common patterns but may not follow the traditional PA definitions (like the specific sequence of single 
+movements). With the data-driven model, the data can reveal their hidden patterns by itself. Since no pre-
+defined movement sequence is required, the chance bias can be reduced significantly. Another benefit of our 
+data-driven method is to improve the accuracy by considering the small effective events into the model. The 
+small effective events can also have significant effects on the final result, like the long-tail effect. The information 
+from both the majority and minority of effective events will contribute to the method equally.
+Many traditional feature construction methods such as fixed length sliding window have been proposed to 
+deal with variable length time series analysis. Our method, SummerTime (Time-series Summarization), 
+leverages the features of time windows as local information about the time-series signal and uses them to create 
+a global description of the signal which preserves the information of every time window within it. The traditional 
+time series machine learning methods depend on a fixed-length representation so that they can build 
+relationships between features and use those to produce their results. However, it is difficult to apply classical 
+time series methods to the time series PA data. Though the time series PA data is rich in information, it is rarely 
+uniformly structured across instances, differing in length and scale. For instance, in regression methods, the 
+time series data can be trained by treating the shorter length of features. However, building models in this way 
+has to lose parts of information in the data, which would lead to overfitting, and to reduce the accuracy of models 
+working with future unseen longer features. Our model, SummerTime, attempts to encapsulate all global 
+information about the time series PA signal as a fixed-length representation, producing a feature vector with a 
+constant number of features for each instance. Not only including as much information as from the data but also 
+providing a competitive solution to deal with variable-length time series PA data. The features of this global 
+description are learnt latently using clustering of the local time windows. This effectively treats the bias from 
+manually-constructed features and results in a higher-quality interpretation of the features. This does not, 
+however, fully remedy the bias from the manually constructed time window features. The prime assumptions 
+we make are that the time window features are already of moderate-to-significant quality for locally describing 
+the signals and that the main obstacles of other time series methods are in the additional assumptions they 
+undertake to solve their respective problems. These assumptions usually hold as we are able to generate potent 
+summary features from the local time window features, and we observe many opportunities for competitive 
+approaches to introduce biases and make our best efforts to avoid those biases. In accounting for these biases, 
+we observe overall better performance than each of our competitive methods. We hope to resolve any further 
+biases by having an end-to-end data-driven solution. Our contributions are as follows:
+Fixed-length feature-vector representation of variable-length time series: This is one of the major 
+obstacles that variable-length time series faces. Many approaches seek to instead classify and regress 
+on local information about the signal or to resize the signal to uniform length across all instances. In 
+either case, these approaches usually achieve the fixed-length representation so as to use classical 
+methods. However, rescaling the signal relinquishes information about the proportion to time (i.e., the 
+concept of an n-second interval is lost), and voting over the classifications and regressions done in the 
+local time windows fails to encode global information about the signal as a whole. Our model achieves 
+the representation without losing proportional and global information.Page 2 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 3:
+For Peer Review
+3End-to-end data-driven approach: Our method, SummerTime, is designed to fit between the time 
+series dataset and the classical methods you want to apply, performing feature construction 
+independently of the experimenter and extracting all knowledge from the data itself. While this fits the 
+idea of a black box, we are of the opinion that this is a valuable trait in a framework. By having the 
+method be data-driven, we avoid the opportunity for introducing further bias from the experimenter and 
+reduce the loss of information.
+Demonstration of improved precision using summarization features to augment regression: 
+Again, in our dataset, we show that we can augment existing state-of-the-art regression models by 
+including our SummerTime features. Not only does doing so improve regression results, but also note 
+that the regression RMSE of the Run-type activities, a close class to the Walk-type activities, drops to 
+around the same level as Walk-type activities. This increased precision indicates that the SummerTime 
+features overcome some bias clearly present in all other regression methods we compare against, 
+each with run-type error well-above Walk-type error.
+     Accurate classification of physical activities and assessment of energy expenditure with broad 
+applications for the healthcare domain:  The SummerTime time series classification framework can 
+accurately detect various physical activity bouts, classify the type of activity being performed, estimate 
+energy expenditure, significantly improve upon current state-of-the-art computing methods. 
+SummerTime will have direct benefit to those examining dose response relationships between 
+sedentary behaviors, physical activity, and health outcomes, in the physical activity and public health 
+fields.
+2 RELATED WORK
+In this section we present a comprehensive review on physical activity classification and energy expenditure 
+predictions using machine learning methods. We also include important works in the greater field of time series 
+analysis.
+Crouter et al. introduced the two-regression model which alternates between a quadratic regression model 
+and a linear regression model based on the coefficients of variations of each bout. [6] This novel approach 
+broke the overall problem objective into two key parts: first, separating instances by their variability into two 
+groupings based on their coefficients of variation; second, applying to each grouping a regression model which 
+is more appropriate for instances of that variability.
+Ye et al. developed a new time series primitive called a shapelet. The shapelet is a subsequence pattern 
+intended to be maximally representative of some class of time series. They demonstrate in the work that the 
+new concept is time-efficient, accurate, and interpretable [31].
+Trost et al. were able to improve physical activity classification accuracy as well as low root mean squared 
+error (RMSE) in energy expenditure estimation with a Deep Neural Network (DNN) model [30]. Mu et al. 
+revisited the two-regression model of Crouter et al. and extended it to several regression models, one per each 
+activity type [14]. The data used in this study including each activity bout therein was structured rather variably, 
+which made it analogous to a free-living data collection. This method utilized distance metric learning methods 
+to learn the underlying block structure of variable-length activity bouts.Page 3 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 4:
+For Peer Review
+4Staudenmayer et al. expanded on the field with another DNN model which they applied to their own dataset 
+[17]. However, their classification procedure was targeting learned activity types, as opposed to expert-defined 
+types. They produced these types through clustering based on their signal activity levels.
+Petitjean et al. developed a nearest centroid classification method which constructs centroids that are 
+meaningful to the Dynamic Time Warping (DTW) Algorithm, to allow for time-efficient classification with the 
+distance-based approach [27]. Li et al. introduced a low-cost device-free activity recognition system based on 
+radio frequency identification devices (RFID), which applied modified dynamic time warping (T- DTW) method 
+to improve the recognition efficiency at the meanwhile [12]. Bastion et al. published an evaluation of cutting-
+edge methods outside of the rigid laboratory setting and confirmed the activity classification community’s 
+suspicions that existing methods would not perform well in the free-living setting [1]. Hills et al. developed a time 
+series classification method using shapelets to produce an alternative representation of time series signals 
+where the new features are distances from each of the k shapelets [10].
+Baydogan et al. made use of the dependency structure within time series to develop a representation and 
+similarity measure which they validate on a wide variety of time series domains [2]. 
+Hallac et al. developed a method that segments and clusters time series data using structural network 
+relations rather than spatial distance to encode different groupings of time series segments [9]. Yao et al. 
+presented a lightweight activity recognition algorithm for mobile cloud usage based on pre-defined atomic 
+events, whose performance highly depended on the quality of pre-defined atomic events [32]. Onan et al. 
+proposed an LDA-based representation method and showed the efficiency in textual clustering task [26], and 
+some previous works were presented in [24, 25].
+Chambon et al. developed a deep learning approach for sleep stage classification that learns end-to-end 
+without computing spectrograms or extracting handcrafted features [5]. Sun et al. developed a gait-based 
+activity recognition method for wearable devices, to reduce the influence caused by the intra-subject gait 
+fluctuation of elderly people [29]. Zhao et al. developed a hardware/software platform with full open API access 
+to recognize continuous gestures, which can accurately and automatically separate and re-merge movements 
+into segments [33].
+Karim et al. proposed transforming the existing univariate time series classification models, LSTM- FCN and 
+ALSTM-FCN, into a multivariate time series classification model by augmenting the fully convolutional block 
+with a squeeze-and-excitation block to further improve accuracy [11]. Clustering methods were also used in 
+topic extraction on natural languages, which contains similar characteristics as time series data [16, 23]. Onan 
+et al. applied weighted embedding and clustering technique to sentiment analysis, which introduced broader 
+application of embedding and deep learning in different fields [17-20].
+3 PROBLEM FORMULATION
+Physical activities (PA) of humans consist of the elemental movements of the body, such as leg raising and 
+arm stretching. We define each breakdown of movement as an atomic event of the time series activities data. 
+And each observed single activity is performed as a PA signal. In this case, each activity signal is a combination 
+of multiple activity events. The time series PA data are a discrete sequence of events of the form𝐷= such that their index set T is temporal in nature. In many cases, the events do not need to {𝑥𝑡1,𝑥𝑡2,⋯;𝑡𝑖∈𝑇 }Page 4 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 5:
+For Peer Review
+5occur at a constant frequency but for the purposes of this paper, we will consider only the case when the time 
+series has events at a constant frequency.
+The most popular two techniques of prediction methods are classification and regression. However, both of 
+them are not suitable for the variable-length time series PA activities data. The reasons and solutions are 
+introduced as follows.
+Classification is the process in which a trained model maps time-series data to a nominal class label. 
+Traditional classification methods operate on the fixed number of features, such that they can be generalized 
+as follows, where is the space of instances which have k features and is the space of class labels.
+(1)𝑓(𝑥1,⋯,𝑥𝑘) :𝐷→𝐶For a fixed-length vectors dataset, we can apply those traditional methods out of the box. However, in the 
+case of variable-length time series, it is impossible to apply traditional models directly.
+One current solution to this is to break-up each time series signal into equally-sized time series windows and 
+to perform traditional classification over features of the windows. The final result would be aggregated through 
+voting or taking the mode. This results in the loss of minority information within the signal. However, minority 
+information may also contribute to the classification, especially when the difference is not very significant. For 
+example, in the cases where a signal has equal parts of two classes, the method observes 50% confidence in 
+its classification result. This is akin to a coin flip.
+Another current solution to the variable-length time series data is to rescale the time-series signal so that all 
+instances are of the same length. If done through interpolation, estimating, and including in-between points, we 
+introduce bias from our choice of interpolation method. In non-smooth signal domains, estimates of in-between 
+points can be radically inaccurate. Regardless of if we account for that bias somehow, rescaling the time series 
+removes proportionality from the signal, relinquishing the distinction between an n-second interval and an m-
+second interval. This causes another bias in that n-point intervals are treated equally, even if they correspond 
+to vastly different stretches of real-time.
+In this paper, instead of directly converting variable-length time series data into a fixed-length summarized 
+format, we propose a method to do this in a way that preserves global information about the signal (i.e., no data 
+point’s contribution is unaccounted for) and preserves in some way proportionality. Furthermore, our method 
+works in a data-driven manner to avoid biases causing by human beings, such as the experiments or the 
+labeling process.
+Our solution is to cluster the time series window features and then use the ratios of membership to each 
+cluster as the features of the summary. This technique can fully encapsulate the global information of the PA 
+signals since the inclusion or exclusion of any events in the signal will affect every summary feature. In this way, 
+the proportionality can be accounted for by comparing the variable-length time-series signals without treating 
+their events as equally frequent. Finally, unsupervised clustering, a popular method in natural language 
+processing [21, 22], is applied to construct summary of signals, which can avoid human bias if manually 
+assigning signals into targeted clusters.Page 5 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 6:
+For Peer Review
+6The regression part has a similar process to classification in that we are building a model which maps from 
+a time series data space to target space. However, the target space of regression methods is generally numeric 
+and continuous, rather than categorical and discrete as in a nominal space of classification. Regression models 
+are usually of the form:
+(2)𝑓(𝑥1,⋯,𝑥𝑘) :𝐷→ℝ𝑑The same as classification case, traditional regression models only can operate over data with the same 
+number of components. One current solution for applying regression models to variable-length data is to treat 
+shorter instances as having missing values. The problem with this is that there are variables which become 
+specifically tuned to long instances from the training set. When presented with new long-instance test data from 
+a different domain distribution, those variables will impact the regression results in ways the training process 
+cannot account for.
+Another current solution is to perform the regression locally on windows and aggregate the regression result 
+as a total or average or similar statistic over the windows. In cases where the distribution of windows is multi-
+modal, an equally-weighted average can push results in the direction of the majority, heavily influenced by the 
+number of points in the signal. This is not ideal since it leads to the issues of proportionality like it in the 
+classification. However, this influence can be lessened without having to make major changes to the underlying 
+regression model.
+Our solution to the regression problem is to apply multiple distributions following the clusters from the 
+classification results. In cases where the PA signals to be regressed over have separate classifications, are 
+different from each other in some categorical way, regression models can be built for each category to produce 
+better results than if a single model was designed to handle every category. So, to decide on which regression 
+model should be applied to a new time series PA signal, the classification of its events is necessary. The 
+regression model would be applied to each window and aggregate the result over the whole signal as usual. 
+But we will include, as regression variables, the time series summarization of the signal from the clustering. 
+These variables carry information about the signal as a whole which we demonstrate to have a positive effect 
+on time series of differing lengths.
+4 METHODOLOGY
+Compared with the traditional methods, our SummerTime algorithm works on both the fixed-length and 
+variable-length time series data. Furthermore, our model can provide very competitive results of the regression 
+technique by considering multiple distributions for different kinds of PA signals.
+There are three major phases in the algorithm. The SummerTime framework can be introduced as follow 
+(shown in Figure 1):
+1. Cluster Generation: Produce Time Series Summarizations of PA signals
+2. Classification: Determine the Class of the Time Series Signals from the Summarization
+3. Regression: Select the Appropriate Regression Model Based on the Previous phases and Leverage 
+Summaries to Refine Regression over the Time Series SignalsPage 6 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 7:
+For Peer Review
+7Cluster Generation Phase:  In this stage, we need to extract the summarization of clusters from the signals 
+with different atomic events. To achieve this goal, we first create an Atomic Unit Dictionary (Figure 1-1d), then 
+the summarization of original PA signals can be extracted based on the dictionary (Figure 1-2c).
+In data preprocessing, each raw variable-length time series PA signal  is cut into  fixed-length time series 𝑛𝑇𝑛windows (where ) without any overlapping, then we apply Gaussian Mixture Model (GMM) to cluster 𝑛∈𝑁activity windows into multiple atomic units/clusters. 
+Gaussian Mixture Models (GMM) are a probability distribution consisting of a linear combination of 
+multivariate Gaussian distributions each with its own mean and variance [3]. These individual Gaussian 
+distributions will each correspond to a cluster of time series activity windows that are most likely to belong to 
+them. We utilize this cluster phase of the framework to produce a feature vector of ratios for each time-series 
+signal. This feature vector’s components are of the form   where  is the number of windows that belong to 𝑁𝑛𝑘𝑁𝑛𝑁𝑛𝑘cluster  in the signal  and  is the total number of activity windows in the PA signal .𝑘𝑛𝑁𝑛𝑛Using the features of the time series activity windows, we can define the distribution  over all windows 𝑝(𝑥). In this case, each window from PA signals could be clustered into an atomic unit. It is reasonable to 𝓍∈𝑋assume that within the distribution, there are  component distributions (atomic units) to which each point  𝐾𝑥truly belongs. We further assume that those components are all normally distributed. As a result of these 
+assumptions, we have Equation 3 as the distribution function.
+(3)𝑝(𝑥 !,", #)=$𝐾𝑘=1!𝑘%(𝑥 "𝑘,#𝑘)Here,  is referred to as a mixing coefficient of the kth component of the mixture distribution. We take  !𝑘$!𝑘=1so that  acts as the probability of an arbitrary  belonging to component .!𝑘𝑥𝑘For  in the distribution, we can measure the probability of  belonging to component  by taking Equation 𝑥𝑥𝑘4. This is referred to as , the responsibility of component  for .&𝑘(𝑥)𝑘𝑥(4)&𝑘(𝑥)=!𝑘%(𝑥 "𝑘, #𝑘)$'!'%(𝑥 "',#')To determine which component k a data point x belongs to, we can take the maximum of the responsibilities  
+ over .&𝑘(𝑥)𝑘(5)𝐾(𝑥)=()* max𝑘&𝑘(𝑥)We learn this model using variational Bayesian techniques which allow us to learn an accurate number of 
+clusters  as well as learn each of the  clusters very accurately without overfitting or producing singularity 𝐾𝐾clusters [15].Page 7 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 8:
+For Peer Review
+8
+Fig. 1: The SummerTime framework diagram. The local window features are clustered to produce new summary features 
+for use in the Classification and Regression phases. The Classification Phase makes use of only the newly constructed 
+summaries from the Clustering Phase. In our experimental setting, the classification is of physical activity type. In the 
+Regression Phase, the Window Features, the Summary Features, and the Classification result are all used to produce the 
+physical activity energy expenditure estimate.Page 8 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 9:
+For Peer Review
+9This clustering function  allows us to create the fixed-length feature vectors for the dataset. Next, each 𝐾(𝑥)raw PA signal will be summarized into a length-K vector according to the ratio of activity windows in each atomic 
+cluster unit  We will now define   as follows where    is the usual indicator function and  is the 𝑘∈𝐾,  𝑁𝑛𝐾𝑁𝑛 .𝑁𝑛𝑘/𝑘𝑋𝑛set of all activity windows belonging to activity .𝑛(6)𝑁𝑛𝑘=$|𝑋𝑛|𝑥/𝑘(𝐾(𝑥))(7)𝑁𝑛=|𝑋𝑛|This is the end-point for the clustering phase of the framework. For each activity n, we now have a single 
+fixed-length vector .[𝑁𝑛1𝑁𝑛,⋯,𝑁𝑛𝐾𝑁𝑛]𝑇Classification Phase: We choose Deep Neural Network (DNN) models for classification. A DNN is a layered 
+graph-based non-linear regression model commonly used in machine learning and statistical settings [4]. There 
+is precedent in applying DNNs for the classification of time series signals [28, 30]. In this phase of the 
+SummerTime framework, we are going to perform classification given only the feature vectors produced in the 
+previous clustering phase.
+As a result, our DNN model will consist of  input nodes, where  is the latently-learned cluster-count 𝐾𝐾variable corresponding to the number of clusters. The output layer is a softmax layer which produces discrete 
+categorical values corresponding to class predictions.
+One drawback to using a DNN is that the model is generally considered a backbox and is often over-
+parameterized. As a result, the number of hidden layer nodes was chosen empirically. However, this does not 
+inhibit the model’s strength at performing classification. By selecting empirically, the hidden layer 
+hyperparameter, we can assume that the network with the appropriate number of hidden layer neurons will 
+perform best.
+This is the end-point for the classification phase of the framework which produces our final classification 
+prediction for each time-series signal. We then feed-forward the fixed-length feature vector from the clustering 
+phase and the classification results forward into the regression phase.
+n-Regression Phase: Results from the Two-Regression Model by [6] show that knowledge of a time series 
+signal’s class has a significant impact on accurate regression over the signal. We intend to leverage not only 
+the physical activity class prediction of the classification phase of the framework, but also to reuse the fixed-
+length feature vector produced in the clustering phase of the framework.
+For the regression model, we use  distinct Artificial Neural Network models. Each model is trained |𝐶|independently of the others, each on one of the time series classes. Using the classification prediction, we 
+select which of the  to use for the regression phase. The regression model will be applied over each window, |𝐶|rather than the full-length signal. Each Neural Network regression model has 2 nodes in the hidden layer and a 
+single output node for MET estimation.Page 9 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 10:
+For Peer Review
+105 EXPERIMENTS AND RESULTS
+In the medical field, measuring physical activity in children is crucial in learning the link between physical 
+activity and health problems such as obesity and other metabolic issues. Measuring physical activity is generally 
+done in two ways: (1) identifying the types of activities performed and (2) measuring caloric or energy 
+expenditure. Accelerometers prove to be the ideal device for physical activity data collection. While they do not 
+directly identify activities being performed nor measure caloric expenditure, they provide an objective 
+measurement which is information-rich and can be analyzed to predict and estimate these two measurements. 
+They are also a low-cost and non-invasive alternative to indirect calorimetry, which measures caloric 
+expenditure through a breathing device. However, analyzing accelerometer data to make these predictions and 
+estimates is still a difficult, unsolved problem, and estimates made with state-of-the-art methods are still high-
+variance [6]. Furthermore, classical machine learning methods cannot be applied out-of-the-box to a free-living 
+setting since physical activity accelerometer data collected outside of a laboratory environment is generally 
+unstructured or continuous stream time series.
+5.1 Data Set
+The dataset used for validation is a combined dataset from two studies performed by [6]. The data was 
+collected from child participants performing a wide variety of physical activities. The participants were outfitted 
+with an Actigraph X accelerometer which was used to collect tri-axial accelerometer counts at one count per 
+second. Participants were hooked up with a Cosmed K4b2 to collect energy expenditure measurements in MET 
+(Metabolic Equivalent of Task) units.
+Start and end times were observed, as well as physical activity (PA) type for every bout of activity performed 
+by each participant. Our model will not predict cut-points for activities but will instead classify the PA type and 
+estimate physical activity energy expenditure (PAEE) of time series segments. As such, our dataset comes pre-
+segmented with true segment bounds.
+The variable-length nature of the data is an allegory for the free-living setting, where activity length is not 
+rigidly defined. The common approach to deal with multi-instance data, data for which each instance has 
+multiple parts, is to break it up into its smaller parts and build a model over the members of the multi-instances 
+instead. We will do just that, but we will maintain the association between the multi-instance and its members 
+by referring to the multi-instance as the activity bout and its members as activity windows which belong to the 
+bout. In total, 184 child participants’ data were used. There were 98 male participants between 8 years old and 
+15 years old. There were 86 female participants between 8 years old and 14 years old.
+For each of these participants, one bout of lying resting for up to 30 minutes with a median time of 17 minutes. 
+All other activities were performed for up to 10 minutes with a median time of 4 minutes. All activity data is 
+collected at the 1-second resolution. Activities which were included in the study were Computer Games, 
+Reading, Light Cleaning, Sweeping, Brisk Track Walking, Slow Track Walking, Track Running, Walking Course, 
+Playing Catch, Wall Ball, and Workout Video. These activities classes were binned into categories by the 
+rigorousness of the associated activity; the category classes were Sedentary (Sed), Light Household Chores 
+and Games (LHH), Moderate to Vigorous Household Chores and Sports (MtV), Walking (Walk), and Running 
+(Run). See Table I for a visual breakdown of the categories. The categories are organized in order of ascending 
+intensity.Page 10 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 11:
+For Peer Review
+11
+(a)
+(b)
+(c)
+(d)
+(e)Fig. 2: Above, we show a single instance of Track Running as it makes its way through the clustering phase of the 
+framework. (a) shows the x-axis accelerometer counts for the activity. (b) shows the breakdown of the signal into the 12-
+second windows for this axis. Not shown is the lag-1 autocorrelation feature. This is the standard means for constructing 
+data instances from physical activity time-series data. In (c), we show a PCA projection of the entire activity. The shapes of 
+the data points indicate the clusters each activity window was assigned to. (d) and (e) demonstrate the feature construction 
+from the clustering. The new features associated with an activity instance are the ratios of membership to each cluster.Page 11 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 12:
+For Peer Review
+12The representation of each activity category in the dataset is not equal. Reference again Table I to see the 
+huge disparity in the number of windows.
+TABLE I: Types of activities present in the data set and what activity categories they belong toCategory and ClassNumber of WindowsLying Rest14755Playing Computer Games860SedentaryReading86016475Light Cleaning840Sweeping865Light Household and GamesWorkout Video8002505Wall Ball845Moderate-Vigorous Household and SportsPlaying Catch7251570Brisk Track Walking1210Slow Track Walking1000WalkWalking Course15653775RunTrack Running485485On the right side of Table I, the columns are the number of 12-second windows corresponding to each 
+category and class. It is obviously to find that Sedentary activities are significantly over-represented within the 
+data set and Running activities are under-represented, contributing to a severely imbalanced data set. 
+Furthermore, Walking is the second most-represented category, having nearly eight times as many windows as 
+Running, a class that it is difficult to be distinguished from.
+5.2 Window Features
+For use with our method, a time series signal must be segmented into equally-sized intervals or windows. 
+Each window must be assigned features that characterize the local information in that region of the signal. A lot 
+of useful features have been proposed in this field. Our framework is feature-agnostic and can accommodate 
+different types of features such as sum of tri-axial squares. We adopted some popular features (e.g. percentile 
+features) used in this field [28, 30] and further summarized them into more robust high quality features. 
+For percentile features, we characterize a window along each of its axes by the interval’s 10th, 25th, 50th, 
+75th, and 90th percentiles. This follows the scheme used by those previous works. This encodes information 
+about the distribution of points within the window, excluding the minimum and maximum to be robust against 
+outliers.
+We also include an additional feature per axis, lag-1 autocorrelation. Autocorrelation measures the 
+correlation between a signal’s current value and its past values. By taking a lag of 1, we are considering how 
+correlated the values of the signal are with their previous value. In total, each window has five percentile features 
+per axis and one lag-1 correlation feature per axis, for a total of 18 features per window.
+Each activity bout in the dataset consists of a number of minutes of activity. For use with our method, each 
+minute of activity is broken up into five 12-second windows. This length was chosen because it was the lowest 
+reasonable limit, we could justify maximizing the resolution of our time-series signals. The fewer windows the 
+activity bout has, the coarser the cluster summary features would be.Page 12 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 13:
+For Peer Review
+13However, it must be addressed that 12-second intervals do not evenly divide into 10th, 25th, 50th, 75th, and 
+90th percentiles. For this, we chose to use the nearest appropriate points for those percentiles: the 2nd, 3rd, 
+6th, 9th, and 11th points. Since our data resolution was 1-second, we are very limited in our choices of window-
+lengths. The smallest evenly divisible length would be 20. However, we chose 12 to grant us additional 
+resolution beyond that limit. An alternative to choosing the nearest appropriate points would be to perform 
+interpolation, and in this setting, we cannot justify interpolating the data at these scales. Since we cannot 
+account for the general behavior of the signal between measurements, there is no reasonable assumption to 
+make for the best approximation of in-between points; choosing any interpolation scheme would introduce 
+significant bias.
+All regression, DNN, and experiments performed herein were done using MATLAB 2018a [13]. The code for 
+Variational Bayesian Gaussian Mixture Models is part of the Pattern Recognition and Machine Learning Toolbox 
+on the MATLAB File Exchange [15].
+5.3 Leave-one Person Out Cross-Validation
+For cross-validating our method, we use leave-one person out. We train our framework on all of the data 
+excluding the instances associated with a single participant and repeat for each participant in the data set. We 
+chose to test at the participant scope rather than the instance scope to avoid any bias we would incur while 
+predicting PA type or estimating PAEE for one of a participant’s activities given that we have trained on the 
+other activities they performed for the dataset.
+5.4 Competitive Methods
+For the classification phase, we compare SummerTime with a baseline Deep Neural Network (DNN) model.
+For the regression phase, we compare SummerTime with Linear Regression on Local Features with Voting, 
+on a 5- Regression Model applied to the classification by DNN, and the DNN on Local Features with Voting.
+DNN Classification with Voting: The DNN we compare classification against takes as input the time 
+window features and produces an activity type classification per window. The classification result for the entire 
+activity is aggregated by majority voting, using the model. The hidden layer consists of 25 hidden neurons, 
+following the network topology from [28].
+Comparison with this method shows that the summarization features produce better classification results 
+than using the local features with voting since the underlying classification method is equivalent.
+Linear Regression on Local Features: We compare the regression phase of SummerTime with a linear 
+regression model. The design matrix of the linear regression consists of a bias term and the window features. 
+The PAEE estimates are aggregated as sums of each window for the activity as a whole. This model is a 
+regression baseline for the bare minimum attempt at estimating the energy expenditure from available variables.
+DNN Regression:  Finally, we compare the regression phase with the DNN directly. The DNN is a powerful 
+method that is one of the main methods used for classifying physical activity types. Once again, regression 
+results are aggregated as sums for the activity as a whole.Page 13 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 14:
+For Peer Review
+145.5 Classification Results
+To validate PA classification, we use multi-class accuracy. We will generally refer to in-class accuracy, as 
+opposed to overall accuracy. The in-class accuracies of each class are more indicative of the success of our 
+method as they are not heavily influenced by a large number of easily-correctly-classified Sedentary activities. 
+The changes in overall accuracy are less indicative of improvement because of the imbalance in the underlying 
+dataset.
+Table II includes the confusion matrix detailing classification of activity instances. A 3-layer (with 2 nodes in 
+the hidden layer) DNN model is employed for the classification step using features summarized by our 
+SummerTime framework. The rows of Table II represent the ground truth label of each instance, whereas 
+columns represent our classification model’s predictions. The diagonals in the bold font are the correctly 
+classified instances. In Table III, we present the confusion matrix of the baseline DNN classifier. The baseline 
+DNN classifier is built with the same 3-layer fully connected neural network as used in our method. 
+Along the diagonal of Table IV, since activity classes are imbalanced, we provide the sensitivity (SEN) and 
+specificity (SPE) of the classification results with SummerTime and the classification results from baseline DNN 
+in percentages. It is easy to see that, without summarization, most classes have worse true positive rate 
+(sensitivity) and true negative rate (specificity) than our method. Specifically, for the smallest activity class, Run, 
+the performance of our method on sensitivity is significantly better than the baseline DNN classifier due to less 
+information loss. It could be very helpful for PA research that often involves imbalanced data. Furthermore, our 
+model shows a better performance in identifying negative groups, according to higher specificity across all 
+classes. It could be very useful to PA researchers in the healthcare field. 
+TABLE II: Confusion Matrix of activity classification using SummerTime modelSed.LHHMtVWalkRunSed.186171826100LHH2053149777377MtV578962773564Walk250714325229Run021002821431Columns are predictions and rows are actuals. Along the diagonal are the in-class true-counts.
+TABLE III: Confusion Matrix of activity classification using the baseline DNN modelSed.LHHMtVWalkRunSed.18700160000LHH22030158408020MtV35880598040235Walk250954310220Run002103651240Columns are predictions and rows are actuals. Along the diagonal are the in-class true-counts.Page 14 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 15:
+For Peer Review
+15TABLE IV: Confusion Matrix for the Classification Phase as percentages, with Sensitivity (SEN) and Specificity (SPE) along 
+the diagonalSed.LHHMtVWalkRunSEN (%)SPE (%)SEN (%)SPE (%)SEN (%)SPE (%)SEN (%)SPE (%)SEN (%)SPE (%)SummerTime98.7198.680.9777.880.3259.430.0073.730.0090.28Sed.DNN99.1598.430.8578.130.0059.990.0073.080.0090.37SummerTime4.9142.6275.4397.0118.6179.970.8985.710.1794.69LHHDNN5.2742.2772.2296.8020.1280.661.9285.490.4894.78SummerTime0.0736.1111.0088.7087.5596.580.4984.260.8994.35MtVDNN0.4935.7812.2789.2483.4096.120.5683.883.2894.98SummerTime0.5462.970.0087.131.5377.4793.0198.894.9295.31WalkDNN0.5440.800.0087.342.0478.0492.6998.494.7395.33SummerTime0.0045.910.1188.185.5179.3815.5487.3878.8499.14RunDNN0.0045.550.0088.3711.5780.1620.1187.2968.3298.64Columns are predictions and rows are actuals. Take note of the misclassification of Run activities as Walking and Light Household 
+Chores and Games compared to our method.
+5.6 Regression Results
+To validate PAEE regression results, we make use of the root-mean-squared error (RMSE) measure. The 
+formula for RMSE is as follows, where  is the regression output, and y is the true EE (Energy Expenditure).2(8)3456=6(272)2This measure acts as the sample standard deviation of differences between predicted and true values, 
+meaning that we can interpret it directly as a measure of both accuracy and precision of prediction [30]. We 
+calculate RMSE for both in-class and overall.
+In Table V, we show the RMSE values associated with the predicted METs for each regression model tested 
+by every activity category. Our method, 5-DNN including Cluster Features, performed best in each class and 
+also out-performed each method overall, achieving an overall RMSE of 1.1175. Further, compared with purely 
+based models, we show that the cluster features generated by our framework can provide necessary accuracy 
+and precision to energy expenditure estimation as all methods listed which include the cluster features out-
+perform the models without them.
+TABLE V: RMSE for MET estimates of each Regression Model by Activity Class.Sed.LHHMtVWalkRunOverall RMSELinear Regression0.61321.34312.02611.51002.83411.3815DNN Regression0.50401.33651.91051.52692.74751.3171Linear Regression including Cluster 
+Features0.25691.17431.62111.37822.63891.1428DNN including Cluster Features0.24241.18481.64241.41352.65811.15605-DNN including Cluster Features0.22201.19541.61471.36842.46321.1175Page 15 of 17 ACM Transactions on Computing for Healthcare
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+Page 16:
+For Peer Review
+166 CONCLUSION
+To resolve the lack of standard structure in the time series data, in this paper, we chose to bridge the gap 
+between the variable-length, empirically-chosen features for physical activity data and a latently-learned fixed-
+length representation, or summary. Our method, SummerTime, leverages an existing feature construction and 
+through clustering of disjoint time windows establishes a summary of the time series as a whole. The features 
+of the summarization were extracted from the data unsupervised through Gaussian mixture using a variational 
+Bayesian approach. This allows our method to zero- in on the number of representative features of the 
+summarization, naturally doing feature construction and selection. This clustering provides us with an 
+informative fixed-length feature-vector which contains a global description of the signal for a single activity bout. 
+From this, we are able to perform classical machine learning methods on the summaries instead of the original 
+instances. We show that this summarization is sufficient for problems like physical activity type classification 
+and out-performs classification on each time window independently with majority voting. We then show that 
+SummerTime can augment energy expenditure predictions per window by including with each window’s original 
+features the summarization of the bout.
